@@ -1,22 +1,12 @@
-from flwr.server.strategy import FedAvg
 import flwr as fl
-import numpy as np
+from FedStrategy import FedSGDStrategy
+from init_model_weights import init_model_weights
 
-def aggregate_metrics(metrics):
-    accuracies = [m[1]["test_accuracy"] for m in metrics]
-    return {"test_accuracy": float(np.mean(accuracies))}
-
-strategy = FedAvg(
-    fraction_fit=1.0,
-    fraction_evaluate=1.0,
-    min_fit_clients=2,
-    min_evaluate_clients=2,
-    min_available_clients=2,
-    evaluate_metrics_aggregation_fn=aggregate_metrics
-)
+print("🚀 Starting Flower Server (FedSGD)...")
+strategy = FedSGDStrategy(model_init_fn=init_model_weights, lr=0.01)
 
 fl.server.start_server(
-    server_address="0.0.0.0:8080",
-    config=fl.server.ServerConfig(num_rounds=3),
+    server_address="127.0.0.1:9091",
+    config=fl.server.ServerConfig(num_rounds=3,round_timeout=None),
     strategy=strategy
 )
