@@ -2,7 +2,8 @@ import flwr as fl
 import numpy as np
 from typing import List, Tuple
 from flwr.common import FitRes, EvaluateRes, parameters_to_ndarrays, ndarrays_to_parameters
-
+import time
+# ✅ FedSGD Strategy với LR cố định
 class FedSGDStrategy(fl.server.strategy.Strategy):
     def __init__(self, model_init_fn, lr=0.01):
         super().__init__()
@@ -22,6 +23,11 @@ class FedSGDStrategy(fl.server.strategy.Strategy):
         return ndarrays_to_parameters(self.model_params)
 
     def configure_fit(self, server_round, parameters, client_manager):
+    # ✅ Chờ cho đến khi có ít nhất 1 client
+        while client_manager.num_available() == 0:
+            print("[Server] Waiting for clients to connect...")
+            time.sleep(2)  # chờ 2 giây rồi kiểm tra lại
+        
         clients = client_manager.sample(num_clients=self.num_fit_clients(client_manager.num_available()))
         return [(c, fl.common.FitIns(parameters, {})) for c in clients]
 
@@ -44,9 +50,26 @@ class FedSGDStrategy(fl.server.strategy.Strategy):
         clients = client_manager.sample(num_clients=self.num_evaluation_clients(client_manager.num_available()))
         return [(c, fl.common.EvaluateIns(parameters, {})) for c in clients]
 
-    def aggregate_evaluate(self, server_round, results: List[Tuple[fl.server.client_proxy.ClientProxy, EvaluateRes]], failures):
-        accs = [res.metrics["test_accuracy"] for _, res in results if "test_accuracy" in res.metrics]
-        return (float(np.mean(accs)) if accs else 0.0), {"test_accuracy": float(np.mean(accs)) if accs else 0.0}
+    def aggregate_evaluate(self, server_round, results, failures):
+        if not results:
+            return 0.0, {}
+
+        metrics_all = {}
+        for _, res in results:
+            for k, v in res.metrics.items():
+                metrics_all.setdefault(k, []).append(v)
+
+        # ✅ Trung bình các metrics
+        metrics_avg = {k: float(np.mean(v)) for k, v in metrics_all.items()}
+
+        # ✅ Log tất cả metrics
+        print(f"\n🌍 [Round {server_round}] Evaluation Metrics:")
+        for k, v in metrics_avg.items():
+            print(f"  {k}: {v:.4f}")
+
+        return metrics_avg.get("test_accuracy", 0.0), metrics_avg
+
+
 
     def evaluate(self, server_round, parameters):
         return None
